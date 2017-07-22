@@ -1,53 +1,158 @@
 # **Finding Lane Lines on the Road** 
 [![Udacity - Self-Driving Car NanoDegree](https://s3.amazonaws.com/udacity-sdc/github/shield-carnd.svg)](http://www.udacity.com/drive)
 
-<img src="examples/laneLines_thirdPass.jpg" width="480" alt="Combined Image" />
+The goals / steps of this project are the following:
+* Make a pipeline that finds lane lines on the road
+* Reflect on your work in a written report
 
-Overview
+
+[//]: # (Image References)
+
+[image1]: ./examples/grayscale.jpg "Grayscale"
+
 ---
 
-When we drive, we use our eyes to decide where to go.  The lines on the road that show us where the lanes are act as our constant reference for where to steer the vehicle.  Naturally, one of the first things we would like to do in developing a self-driving car is to automatically detect lane lines using an algorithm.
+### Reflection
 
-In this project you will detect lane lines in images using Python and OpenCV.  OpenCV means "Open-Source Computer Vision", which is a package that has many useful tools for analyzing images.  
+### 1. Describe your pipeline. As part of the description, explain how you modified the draw_lines() function.
 
-To complete the project, two files will be submitted: a file containing project code and a file containing a brief write up explaining your solution. We have included template files to be used both for the [code](https://github.com/udacity/CarND-LaneLines-P1/blob/master/P1.ipynb) and the [writeup](https://github.com/udacity/CarND-LaneLines-P1/blob/master/writeup_template.md).The code file is called P1.ipynb and the writeup template is writeup_template.md 
+My pipeline consisted of 5 steps:
 
-To meet specifications in the project, take a look at the requirements in the [project rubric](https://review.udacity.com/#!/rubrics/322/view)
+1. Images are converted to grayscale
+      ```
+      gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+      ```
 
+      ![](reflection_images/gray.jpg?raw=true)
 
-Creating a Great Writeup
----
-For this project, a great writeup should provide a detailed response to the "Reflection" section of the [project rubric](https://review.udacity.com/#!/rubrics/322/view). There are three parts to the reflection:
+2. Next, I blurred the image with Gausian smoothing to remove noise
+      ```
+      blur = cv2.GaussianBlur(gray, (5, 5), 0)
+      ```
 
-1. Describe the pipeline
+      ![](reflection_images/blurry.jpg?raw=true)
 
-2. Identify any shortcomings
+3. Then, I applied Canny edge detection with a low threshold of 50 and a high
+   threshold of 150. Canny works by detecting strong edges that have a pixel gradient
+   above the high threshold. It rejects pixel gradients that are below the
+   low threshold. Then, it keeps pixel gradients that are between the
+   low and high thresholds and close to the strong edges it detected.
+      ```
+      edges = cv2.Canny(blur, 50, 150)
+      ```
 
-3. Suggest possible improvements
+      ![](reflection_images/edges.jpg?raw=true)
 
-We encourage using images in your writeup to demonstrate how your pipeline works.  
+4. Next, I select a trapezoid around the bottom of the image where we expected
+   to find lanes.
+      ```
+      imshape = image.shape
+      third = int(imshape[0] * .66)
+      half = int(imshape[1] * .50)
+      vertices = np.array(
+          [[(0,imshape[0]),
+            (half - 130, third),
+            (half + 130, third),
+            (imshape[1],imshape[0])]],
+          dtype=np.int32)
+      masked_edges = region_of_interest(edges, vertices)
+      ```
 
-All that said, please be concise!  We're not looking for you to write a book here: just a brief description.
+      ![](reflection_images/masked_edges.jpg?raw=true)
 
-You're not required to use markdown for your writeup.  If you use another method please just submit a pdf of your writeup. Here is a link to a [writeup template file](https://github.com/udacity/CarND-LaneLines-P1/blob/master/writeup_template.md). 
+5. Finally, I used opencv's `HoughLinesP` function to find lines with of a
+   minimum length
+      ```
+      rho = 3           # distance resolution in pixels of the Hough grid
+      theta = np.pi/180 # angular resolution in radians of the Hough grid
+      threshold = 15    # minimum number of votes (intersections in Hough grid cell)
+      min_line_len =  5 # minimum number of pixels making up a line
+      max_line_gap = 25 # maximum gap in pixels between connectable line segments
 
+      lines = cv2.HoughLinesP(
+        img,
+        rho,
+        theta,
+        threshold,
+        np.array([]),
+        minLineLength=min_line_len,
+        maxLineGap=max_line_gap
+      )
+      ```
 
-The Project
----
+      ![](reflection_images/with_lines.jpg?raw=true)
 
-## If you have already installed the [CarND Term1 Starter Kit](https://github.com/udacity/CarND-Term1-Starter-Kit/blob/master/README.md) you should be good to go!   If not, you should install the starter kit to get started on this project. ##
+#### Updates to the `draw_lines` function
 
-**Step 1:** Set up the [CarND Term1 Starter Kit](https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/83ec35ee-1e02-48a5-bdb7-d244bd47c2dc/lessons/8c82408b-a217-4d09-b81d-1bda4c6380ef/concepts/4f1870e0-3849-43e4-b670-12e6f2d4b7a7) if you haven't already.
+In order to draw a single line on the left and right lanes, I updated the
+draw_lines function to filter lines by slope and by their x coordinate. Points
+with an x coordinate less than half of the width of the image were used for the
+left lane, and the other points were used for the right lane. Those points were
+then fit to a linear model using `RANSACRegressor` from `sklearn`. `RANSACRegressor` removes outliers which helped to fit some of the lines in the challenge video to the correct lane. Then, I used the `coef_` (slope) and `intercept_` (y intercept) from the linear model to find the x coordinates at the bottom of the image and in the middle of the image. These coordinates were used to plot a single line for the left and right lanes.
 
-**Step 2:** Open the code in a Jupyter Notebook
+```
+def draw_lines(img, lines, color=[255, 0, 0], thickness=5):
+    x_right = []
+    y_right = []
+    x_left = []
+    y_left = []
 
-You will complete the project code in a Jupyter notebook.  If you are unfamiliar with Jupyter Notebooks, check out <A HREF="https://www.packtpub.com/books/content/basics-jupyter-notebook-and-python" target="_blank">Cyrille Rossant's Basics of Jupyter Notebook and Python</A> to get started.
+    halfway = int(image.shape[1] * .50)
+    for line in lines:
+        for x1,y1,x2,y2 in line:
+            if (x2 - x1) == 0:
+                continue
+            slope = ((y2-y1)/(x2-x1))
 
-Jupyter is an Ipython notebook where you can run blocks of code and see results interactively.  All the code for this project is contained in a Jupyter notebook. To start Jupyter in your browser, use terminal to navigate to your project directory and then run the following command at the terminal prompt (be sure you've activated your Python 3 carnd-term1 environment as described in the [CarND Term1 Starter Kit](https://github.com/udacity/CarND-Term1-Starter-Kit/blob/master/README.md) installation instructions!):
+            if x1 <= halfway and x2 <= halfway and slope < -0.5:
+                x_left.extend(([x1], [x2]))
+                y_left.extend(([y1], [y2]))
+            elif x1 > halfway and x2 > halfway and slope > 0.5:
+                x_right.extend(([x1], [x2]))
+                y_right.extend(([y1], [y2]))
 
-`> jupyter notebook`
+    minright_y = minleft_y = 360
+    maxleft_y  = maxright_y = 720
 
-A browser window will appear showing the contents of the current directory.  Click on the file called "P1.ipynb".  Another browser window will appear displaying the notebook.  Follow the instructions in the notebook to complete the project.  
+    if len(x_left) >= 2 and len(y_left) >=2:
+        left_fit = RANSACRegressor(LinearRegression(), residual_threshold=10.0)
+        left_fit.fit(x_left, y_left)
 
-**Step 3:** Complete the project and submit both the Ipython notebook and the project writeup
+        # Left Line
+        m_left = left_fit.estimator_.coef_
+        b_left = left_fit.estimator_.intercept_
 
+        if m_left != 0:
+            minleft_x = int((minleft_y - b_left)/m_left)
+            maxleft_x = int((maxleft_y - b_left)/m_left)
+
+            cv2.line(img, (minleft_x, minleft_y), (maxleft_x, maxleft_y), color,thickness)
+
+    if len(x_right) >= 2 and len(y_right) >=2:
+        right_fit = RANSACRegressor(LinearRegression(), residual_threshold=10.0)
+        right_fit.fit(x_right, y_right)
+
+        # Right Line
+        m_right = right_fit.estimator_.coef_
+        b_right = right_fit.estimator_.intercept_
+
+        if m_right != 0:
+            minright_x = int((minright_y - b_right)/m_right)
+            maxright_x = int((maxright_y - b_right)/m_right)
+
+            cv2.line(img, (minright_x, minright_y), (maxright_x, maxright_y), color,thickness)
+```
+
+      ![](reflection_images/image_with_lanes.jpg?raw=true)
+
+### 2. Identify potential shortcomings with your current pipeline
+
+One shortcoming visible in the challenge video is that shaddows make it difficult for my pipeline to correctly
+detect lane lines.
+
+Other potential shortcomings are night, rain, and snow.
+
+### 3. Suggest possible improvements to your pipeline
+
+A possible improvement would be to try normalizing colors before converting
+grayscale. This may help issues caused by shaddows.
