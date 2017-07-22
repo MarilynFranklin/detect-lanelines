@@ -23,14 +23,10 @@ My pipeline consisted of 5 steps:
       gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
       ```
 
-      ![](reflection_images/gray.jpg?raw=true)
-
 2. Next, I blurred the image with Gausian smoothing to remove noise
       ```
       blur = cv2.GaussianBlur(gray, (5, 5), 0)
       ```
-
-      ![](reflection_images/blurry.jpg?raw=true)
 
 3. Then, I applied Canny edge detection with a low threshold of 50 and a high
    threshold of 150. Canny works by detecting strong edges that have a pixel gradient
@@ -61,7 +57,7 @@ My pipeline consisted of 5 steps:
       ![](reflection_images/masked_edges.jpg?raw=true)
 
 5. Finally, I used opencv's `HoughLinesP` function to find lines with of a
-   minimum length
+   minimum length and then draw lines on the image
       ```
       rho = 3           # distance resolution in pixels of the Hough grid
       theta = np.pi/180 # angular resolution in radians of the Hough grid
@@ -78,9 +74,11 @@ My pipeline consisted of 5 steps:
         minLineLength=min_line_len,
         maxLineGap=max_line_gap
       )
+      line_img = np.zeros((img.shape[0], img.shape[1], 3), dtype=np.uint8)
+      draw_lines(line_img, lines)
       ```
 
-      ![](reflection_images/with_lines.jpg?raw=true)
+      ![](reflection_images/image_with_lanes.jpg?raw=true)
 
 #### Updates to the `draw_lines` function
 
@@ -143,11 +141,9 @@ def draw_lines(img, lines, color=[255, 0, 0], thickness=5):
             cv2.line(img, (minright_x, minright_y), (maxright_x, maxright_y), color,thickness)
 ```
 
-      ![](reflection_images/image_with_lanes.jpg?raw=true)
-
 ### 2. Identify potential shortcomings with your current pipeline
 
-One shortcoming visible in the challenge video is that shaddows make it difficult for my pipeline to correctly
+One shortcoming visible in the challenge video is that shadows make it difficult for my pipeline to correctly
 detect lane lines.
 
 Other potential shortcomings are night, rain, and snow.
@@ -155,4 +151,4 @@ Other potential shortcomings are night, rain, and snow.
 ### 3. Suggest possible improvements to your pipeline
 
 A possible improvement would be to try normalizing colors before converting
-grayscale. This may help issues caused by shaddows.
+grayscale. This may help issues caused by shadows.
